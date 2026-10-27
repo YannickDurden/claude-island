@@ -58,7 +58,22 @@ final class SessionStore {
     struct Permission: Identifiable {
         let id = UUID()
         let sessionId, tool, detail: String
+        let toolUseId: String?
         let reply: (Decision) -> Void
+
+        /// Whether a later event of the session shows this request was already answered in Claude.
+        func isSettled(by e: HookEvent) -> Bool {
+            guard e.sessionId == sessionId else { return false }
+            switch e.name {
+            case .postToolUse, .postToolUseFailure:
+                // Without a tool_use_id, fall back to the tool name.
+                return toolUseId.map { $0 == e.toolUseId } ?? (tool == e.tool)
+            case .stop, .userPromptSubmit, .sessionEnd:
+                return true
+            default:
+                return false
+            }
+        }
     }
 
     private(set) var sessions: [Session] = []
@@ -80,6 +95,11 @@ final class SessionStore {
     }
 
     func handle(_ e: HookEvent) {
+        // The user may answer in Claude itself while the island waits: close those requests.
+        for permission in permissions where permission.isSettled(by: e) {
+            dropPermission(permission.id)
+            permission.reply(.terminal)
+        }
         if e.name == .sessionEnd {
             sessions.removeAll { $0.id == e.sessionId }
             return
@@ -116,6 +136,10 @@ final class SessionStore {
             sessions[i].status = .attention
             sessions[i].activity = e.message ?? ""
             NSSound(named: "Glass")?.play()
+        case .postToolUse, .postToolUseFailure:
+            if sessions[i].question == nil, !permissions.contains(where: { $0.sessionId == e.sessionId }) {
+                sessions[i].status = .working
+            }
         case .stop:
             sessions[i].status = .idle
             sessions[i].question = nil
@@ -150,7 +174,8 @@ final class SessionStore {
 
     func requestPermission(_ e: HookEvent, reply: @escaping (Decision) -> Void) -> UUID {
         sessions[index(of: e)].status = .attention
-        let permission = Permission(sessionId: e.sessionId, tool: e.tool ?? "?", detail: e.detail ?? "", reply: reply)
+        let permission = Permission(sessionId: e.sessionId, tool: e.tool ?? "?", detail: e.detail ?? "",
+                                    toolUseId: e.toolUseId, reply: reply)
         permissions.append(permission)
         NSSound(named: "Glass")?.play()
         return permission.id

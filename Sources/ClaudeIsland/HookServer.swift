@@ -7,6 +7,8 @@ enum HookEventName: String, Sendable {
     case sessionEnd = "SessionEnd"
     case userPromptSubmit = "UserPromptSubmit"
     case preToolUse = "PreToolUse"
+    case postToolUse = "PostToolUse"
+    case postToolUseFailure = "PostToolUseFailure"
     case subagentStart = "SubagentStart"
     case subagentStop = "SubagentStop"
     case notification = "Notification"
@@ -18,7 +20,7 @@ enum HookEventName: String, Sendable {
 struct HookEvent: Sendable {
     let name: HookEventName
     let sessionId, cwd: String
-    let tool, detail, message, agentId, agentType: String?
+    let tool, toolUseId, detail, message, agentId, agentType: String?
     /// First question of an `AskUserQuestion` call, with a "(+n)" suffix when there are more.
     let question: String?
     /// From the hook's `headers` (env interpolation), empty when the variable is unset.
@@ -33,6 +35,7 @@ struct HookEvent: Sendable {
         self.sessionId = sessionId
         cwd = o["cwd"] as? String ?? ""
         tool = o["tool_name"] as? String
+        toolUseId = o["tool_use_id"] as? String
         message = o["message"] as? String
         agentId = o["agent_id"] as? String
         agentType = o["agent_type"] as? String

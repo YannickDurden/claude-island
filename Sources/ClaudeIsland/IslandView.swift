@@ -49,21 +49,27 @@ struct IslandView: View {
     private static let wing: CGFloat = 70
 
     /// Takes the user to the session, drops its question card and folds the island away.
-    private func open(_ session: SessionStore.Session) {
-        store.dismissQuestion(of: session.id)
+    private func open(_ sessionId: String) {
+        store.dismissQuestion(of: sessionId)
         layout.hoverSuppressed = true
         layout.isHovering = false
-        session.focusTerminal()
+        store.sessions.first { $0.id == sessionId }?.focusTerminal()
     }
 
     private var panel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(store.permissions) { PermissionCard(permission: $0, store: store) }
+            ForEach(store.permissions) { permission in
+                PermissionCard(permission: permission, store: store) {
+                    // No decision: Claude's own prompt, already shown in the session, takes over.
+                    store.decide(permission, .terminal)
+                    open(permission.sessionId)
+                }
+            }
             ForEach(store.sessions.filter { $0.question != nil }) { session in
-                QuestionCard(session: session) { open(session) }
+                QuestionCard(session: session) { open(session.id) }
             }
             ForEach(store.sessions) { session in
-                SessionRow(session: session) { open(session) }
+                SessionRow(session: session) { open(session.id) }
             }
             if store.sessions.isEmpty {
                 Text("Aucune session Claude").font(.callout).foregroundStyle(.secondary)
@@ -84,6 +90,8 @@ struct IslandView: View {
 private struct PermissionCard: View {
     let permission: SessionStore.Permission
     let store: SessionStore
+    /// Answer in the session instead.
+    let onOpen: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -95,7 +103,7 @@ private struct PermissionCard: View {
             HStack {
                 Button("Autoriser") { store.decide(permission, .allow) }.tint(.green)
                 Button("Refuser") { store.decide(permission, .deny) }.tint(.red)
-                Button("Terminal") { store.decide(permission, .terminal) }.tint(.gray)
+                Button("Ouvrir", action: onOpen).tint(.gray)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
