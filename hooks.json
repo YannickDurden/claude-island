@@ -1,0 +1,186 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "curl -s -m 2 -o /dev/null -H \"X-Focus-Url: $WARP_FOCUS_URL\" -H \"X-Term-Program: $TERM_PROGRAM\" -H \"X-Desktop-Session: $CLAUDE_CODE_HOST_SESSION_ID\" --data-binary @- http://127.0.0.1:47821/hook || true"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hook",
+            "timeout": 5,
+            "headers": {
+              "X-Focus-Url": "$WARP_FOCUS_URL",
+              "X-Term-Program": "$TERM_PROGRAM",
+              "X-Desktop-Session": "$CLAUDE_CODE_HOST_SESSION_ID"
+            },
+            "allowedEnvVars": [
+              "WARP_FOCUS_URL",
+              "TERM_PROGRAM",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hook",
+            "timeout": 5,
+            "headers": {
+              "X-Focus-Url": "$WARP_FOCUS_URL",
+              "X-Term-Program": "$TERM_PROGRAM",
+              "X-Desktop-Session": "$CLAUDE_CODE_HOST_SESSION_ID"
+            },
+            "allowedEnvVars": [
+              "WARP_FOCUS_URL",
+              "TERM_PROGRAM",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hook",
+            "timeout": 5,
+            "headers": {
+              "X-Focus-Url": "$WARP_FOCUS_URL",
+              "X-Term-Program": "$TERM_PROGRAM",
+              "X-Desktop-Session": "$CLAUDE_CODE_HOST_SESSION_ID"
+            },
+            "allowedEnvVars": [
+              "WARP_FOCUS_URL",
+              "TERM_PROGRAM",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hook",
+            "timeout": 5,
+            "headers": {
+              "X-Focus-Url": "$WARP_FOCUS_URL",
+              "X-Term-Program": "$TERM_PROGRAM",
+              "X-Desktop-Session": "$CLAUDE_CODE_HOST_SESSION_ID"
+            },
+            "allowedEnvVars": [
+              "WARP_FOCUS_URL",
+              "TERM_PROGRAM",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hook",
+            "timeout": 5,
+            "headers": {
+              "X-Focus-Url": "$WARP_FOCUS_URL",
+              "X-Term-Program": "$TERM_PROGRAM",
+              "X-Desktop-Session": "$CLAUDE_CODE_HOST_SESSION_ID"
+            },
+            "allowedEnvVars": [
+              "WARP_FOCUS_URL",
+              "TERM_PROGRAM",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hook",
+            "timeout": 5,
+            "headers": {
+              "X-Focus-Url": "$WARP_FOCUS_URL",
+              "X-Term-Program": "$TERM_PROGRAM",
+              "X-Desktop-Session": "$CLAUDE_CODE_HOST_SESSION_ID"
+            },
+            "allowedEnvVars": [
+              "WARP_FOCUS_URL",
+              "TERM_PROGRAM",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|idle_prompt|agent_needs_input|elicitation_dialog",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hook",
+            "timeout": 5,
+            "headers": {
+              "X-Focus-Url": "$WARP_FOCUS_URL",
+              "X-Term-Program": "$TERM_PROGRAM",
+              "X-Desktop-Session": "$CLAUDE_CODE_HOST_SESSION_ID"
+            },
+            "allowedEnvVars": [
+              "WARP_FOCUS_URL",
+              "TERM_PROGRAM",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hook",
+            "timeout": 600,
+            "headers": {
+              "X-Focus-Url": "$WARP_FOCUS_URL",
+              "X-Term-Program": "$TERM_PROGRAM",
+              "X-Desktop-Session": "$CLAUDE_CODE_HOST_SESSION_ID"
+            },
+            "allowedEnvVars": [
+              "WARP_FOCUS_URL",
+              "TERM_PROGRAM",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
