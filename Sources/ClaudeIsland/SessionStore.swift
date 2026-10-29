@@ -4,7 +4,7 @@ import Observation
 @MainActor
 @Observable
 final class SessionStore {
-    enum Status { case working, idle, attention }
+    enum Status { case working, idle, attention, done }
 
     struct Subagent: Identifiable {
         let id: String
@@ -81,6 +81,21 @@ final class SessionStore {
 
     var hasQuestions: Bool { sessions.contains { $0.question != nil } }
 
+    /// Session that just finished its turn: the island unfolds on it for a few seconds.
+    private(set) var justFinished: String?
+    private var finishedToken = UUID()
+
+    private func announceFinished(_ sessionId: String) {
+        justFinished = sessionId
+        let token = UUID()
+        finishedToken = token
+        Task {
+            try? await Task.sleep(for: .seconds(4))
+            // A later finish restarts the delay.
+            if finishedToken == token { justFinished = nil }
+        }
+    }
+
     /// Bundle id of the frontmost app other than the island itself.
     var frontmostApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 
@@ -132,6 +147,9 @@ final class SessionStore {
             if let j = sessions[i].subagents.firstIndex(where: { $0.id == e.agentId }) {
                 sessions[i].subagents[j].running = false
             }
+        case .notification where e.notificationType == "idle_prompt" && sessions[i].status == .done:
+            // "Waiting for your input" right after a finish: already shown as done.
+            break
         case .notification:
             sessions[i].status = .attention
             sessions[i].activity = e.message ?? ""
@@ -141,8 +159,9 @@ final class SessionStore {
                 sessions[i].status = .working
             }
         case .stop:
-            sessions[i].status = .idle
+            sessions[i].status = .done
             sessions[i].question = nil
+            announceFinished(e.sessionId)
         case .sessionStart, .sessionEnd, .permissionRequest:
             // Creating the session in `index(of:)` is all they need here.
             break

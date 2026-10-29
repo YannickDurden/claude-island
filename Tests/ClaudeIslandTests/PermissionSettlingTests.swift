@@ -33,6 +33,17 @@ struct PermissionSettlingTests {
         #expect(store.permissions.map(\.sessionId) == ["other"])
     }
 
+    @Test func finishIsAnnouncedAndNotTurnedIntoAttention() {
+        let store = SessionStore()
+        store.handle(event("Stop"))
+        #expect(store.sessions.first?.status == .done)
+        #expect(store.justFinished == "s1")
+
+        let idle = #"{"hook_event_name":"Notification","session_id":"s1","notification_type":"idle_prompt"}"#
+        store.handle(HookEvent(json: Data(idle.utf8), headers: [:])!)
+        #expect(store.sessions.first?.status == .done)
+    }
+
     @Test func fallsBackToToolNameWithoutToolUseId() {
         let store = SessionStore()
         _ = store.requestPermission(event("PermissionRequest", tool: "WebFetch")) { _ in }

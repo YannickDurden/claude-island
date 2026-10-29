@@ -7,7 +7,9 @@ struct IslandView: View {
     let onFrameChange: (CGRect) -> Void
 
     private var notch: CGSize { layout.notch }
-    private var expanded: Bool { layout.isHovering || !store.permissions.isEmpty || store.hasQuestions }
+    private var expanded: Bool {
+        layout.isHovering || !store.permissions.isEmpty || store.hasQuestions || store.justFinished != nil
+    }
 
     var body: some View {
         // A single container: modifiers on a Group would be duplicated onto each branch.
@@ -20,6 +22,7 @@ struct IslandView: View {
         // Without a real notch, an empty island would just be a black bar over the menu bar.
         .opacity(store.sessions.isEmpty && !layout.hasNotch && !expanded ? 0 : 1)
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: onFrameChange)
+        .padding(.trailing, notchCentring)
         .animation(.spring(duration: 0.3), value: expanded)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .environment(\.colorScheme, .dark)
@@ -33,20 +36,26 @@ struct IslandView: View {
                     StatusDot(status: session.status)
                     Text(session.name).font(.caption.bold()).lineLimit(1)
                 }
-                .frame(width: Self.wing, alignment: .leading)
+                .frame(width: Self.leftWing, alignment: .leading)
                 Color.clear.frame(width: notch.width)
                 Text("\(store.sessions.count)").font(.caption.bold())
-                    .frame(width: Self.wing, alignment: .trailing)
+                    .frame(width: Self.rightWing, alignment: .trailing)
             } else {
                 Color.clear.frame(width: notch.width)
             }
         }
-        .padding(.horizontal, store.sessions.isEmpty ? 0 : 12)
+        .padding(.horizontal, store.sessions.isEmpty ? 0 : 10)
         .frame(height: notch.height)
     }
 
-    /// Kept narrow so the pill does not cover menu bar items next to the notch.
-    private static let wing: CGFloat = 70
+    /// Kept narrow so the pill does not cover menu bar items next to the notch;
+    /// the right side, crowded with status icons, only holds the count.
+    private static let leftWing: CGFloat = 70
+    private static let rightWing: CGFloat = 24
+    /// Trailing padding outside the shape that keeps the notch centred despite unequal wings.
+    private var notchCentring: CGFloat {
+        expanded || store.sessions.isEmpty ? 0 : Self.leftWing - Self.rightWing
+    }
 
     /// Takes the user to the session, drops its question card and folds the island away.
     private func open(_ sessionId: String) {
@@ -67,6 +76,9 @@ struct IslandView: View {
             }
             ForEach(store.sessions.filter { $0.question != nil }) { session in
                 QuestionCard(session: session) { open(session.id) }
+            }
+            if let id = store.justFinished {
+                FinishedCard(name: store.name(of: id)) { open(id) }
             }
             ForEach(store.sessions) { session in
                 SessionRow(session: session) { open(session.id) }
@@ -111,6 +123,23 @@ private struct PermissionCard: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white.opacity(0.08), in: .rect(cornerRadius: 12))
+    }
+}
+
+/// Shown for a few seconds when a session finishes its turn.
+private struct FinishedCard: View {
+    let name: String
+    let onOpen: () -> Void
+
+    var body: some View {
+        Label("\(name) a terminé", systemImage: "checkmark.circle.fill")
+            .font(.callout.bold())
+            .symbolRenderingMode(.multicolor)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.08), in: .rect(cornerRadius: 12))
+            .contentShape(.rect)
+            .onTapGesture(perform: onOpen)
     }
 }
 
@@ -168,14 +197,21 @@ private struct StatusDot: View {
     let status: SessionStore.Status
 
     var body: some View {
-        Circle().fill(color).frame(width: 8, height: 8)
+        if status == .done {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.blue)
+                .frame(width: 8, height: 8)
+        } else {
+            Circle().fill(color).frame(width: 8, height: 8)
+        }
     }
 
     private var color: Color {
         switch status {
         case .working: .green
         case .attention: .orange
-        case .idle: .gray
+        case .idle, .done: .gray
         }
     }
 }
