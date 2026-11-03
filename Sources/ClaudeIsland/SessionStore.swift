@@ -96,17 +96,13 @@ final class SessionStore {
         }
     }
 
-    /// Bundle id of the frontmost app other than the island itself.
-    var frontmostApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-
-    /// The session the collapsed pill shows: one blocked on the user,
-    /// else the most recently active in the frontmost app, else the most recently active.
-    var featured: Session? {
+    /// The session waiting on the user, if any: the only case where the collapsed pill
+    /// grows wings past the notch (menus flow around it). Blocked requests come first.
+    var alerting: Session? {
         let blocked = Set(permissions.map(\.sessionId))
         let byRecency = sessions.sorted { $0.lastActivity > $1.lastActivity }
         return byRecency.first { blocked.contains($0.id) || $0.question != nil }
-            ?? byRecency.first { $0.appBundleId == frontmostApp }
-            ?? byRecency.first
+            ?? byRecency.first { $0.status == .attention }
     }
 
     func handle(_ e: HookEvent) {

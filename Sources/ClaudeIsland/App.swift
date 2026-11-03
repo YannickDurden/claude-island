@@ -13,15 +13,6 @@ enum ClaudeIsland {
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
             MainActor.assumeIsolated { store.sync(with: SessionRegistry.load()) }
         }
-        NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { note in
-            let id = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
-            MainActor.assumeIsolated {
-                // Clicking the island activates it: keep the previous app.
-                if let id, id != Bundle.main.bundleIdentifier { store.frontmostApp = id }
-            }
-        }
 
         registerLoginItemOnce()
         NSApplication.shared.setActivationPolicy(.accessory)

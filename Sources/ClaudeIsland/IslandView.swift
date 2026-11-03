@@ -20,7 +20,7 @@ struct IslandView: View {
         .background(.black, in: UnevenRoundedRectangle(bottomLeadingRadius: expanded ? 22 : 12,
                                                          bottomTrailingRadius: expanded ? 22 : 12))
         // Without a real notch, an empty island would just be a black bar over the menu bar.
-        .opacity(store.sessions.isEmpty && !layout.hasNotch && !expanded ? 0 : 1)
+        .opacity(store.alerting == nil && !layout.hasNotch && !expanded ? 0 : 1)
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: onFrameChange)
         .padding(.trailing, notchCentring)
         .animation(.spring(duration: 0.3), value: expanded)
@@ -28,10 +28,10 @@ struct IslandView: View {
         .environment(\.colorScheme, .dark)
     }
 
-    /// Collapsed: blends into the notch, with equal "wings" on each side so it stays centred on it.
+    /// Collapsed: exactly the notch, with wings (name, count) only while a session waits on the user.
     private var pill: some View {
         HStack(spacing: 0) {
-            if let session = store.featured {
+            if let session = store.alerting {
                 HStack(spacing: 6) {
                     StatusDot(status: session.status)
                     Text(session.name).font(.caption.bold()).lineLimit(1)
@@ -44,7 +44,7 @@ struct IslandView: View {
                 Color.clear.frame(width: notch.width)
             }
         }
-        .padding(.horizontal, store.sessions.isEmpty ? 0 : 10)
+        .padding(.horizontal, store.alerting == nil ? 0 : 10)
         .frame(height: notch.height)
     }
 
@@ -54,7 +54,7 @@ struct IslandView: View {
     private static let rightWing: CGFloat = 24
     /// Trailing padding outside the shape that keeps the notch centred despite unequal wings.
     private var notchCentring: CGFloat {
-        expanded || store.sessions.isEmpty ? 0 : Self.leftWing - Self.rightWing
+        expanded || store.alerting == nil ? 0 : Self.leftWing - Self.rightWing
     }
 
     /// Takes the user to the session, drops its question card and folds the island away.
