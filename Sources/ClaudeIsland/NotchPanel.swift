@@ -34,7 +34,7 @@ final class NotchPanel: NSPanel {
         ignoresMouseEvents = true
         acceptsMouseMovedEvents = true
 
-        let host = NSHostingView(rootView: IslandView(store: store, layout: layout) { [weak self] in
+        let host = FirstClickHostingView(rootView: IslandView(store: store, layout: layout) { [weak self] in
             self?.islandRect = $0
             self?.trackMouse()
         })
@@ -91,4 +91,9 @@ final class NotchPanel: NSPanel {
         else { return CGSize(width: 200, height: NSStatusBar.system.thickness) }
         return CGSize(width: screen.frame.width - left.width - right.width, height: screen.safeAreaInsets.top)
     }
+}
+
+/// The panel never becomes key: without this, the first click on a button would only focus the window.
+private final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }

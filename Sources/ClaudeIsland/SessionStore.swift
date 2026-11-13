@@ -59,6 +59,10 @@ final class SessionStore {
         let id = UUID()
         let sessionId, tool, detail: String
         let toolUseId: String?
+        /// Present when Claude offers a "don't ask again" rule.
+        let sessionRules: Data?
+        let questions: [HookEvent.Question]
+        let toolInput: Data?
         let reply: (Decision) -> Void
 
         /// Whether a later event of the session shows this request was already answered in Claude.
@@ -190,9 +194,11 @@ final class SessionStore {
     func requestPermission(_ e: HookEvent, reply: @escaping (Decision) -> Void) -> UUID {
         sessions[index(of: e)].status = .attention
         let permission = Permission(sessionId: e.sessionId, tool: e.tool ?? "?", detail: e.detail ?? "",
-                                    toolUseId: e.toolUseId, reply: reply)
+                                    toolUseId: e.toolUseId, sessionRules: e.sessionRules,
+                                    questions: e.questions, toolInput: e.toolInput, reply: reply)
         permissions.append(permission)
-        NSSound(named: "Glass")?.play()
+        // Questions already rang on PreToolUse.
+        if e.questions.isEmpty { NSSound(named: "Glass")?.play() }
         return permission.id
     }
 

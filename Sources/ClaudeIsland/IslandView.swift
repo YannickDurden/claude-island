@@ -68,13 +68,21 @@ struct IslandView: View {
     private var panel: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(store.permissions) { permission in
-                PermissionCard(permission: permission, store: store) {
-                    // No decision: Claude's own prompt, already shown in the session, takes over.
+                // No decision on "Ouvrir": Claude's own prompt, already shown in the session, takes over.
+                let onOpen = {
                     store.decide(permission, .terminal)
                     open(permission.sessionId)
                 }
+                if permission.questions.isEmpty {
+                    PermissionCard(permission: permission, store: store, onOpen: onOpen)
+                } else {
+                    AnswerCard(permission: permission, store: store, onOpen: onOpen)
+                }
             }
-            ForEach(store.sessions.filter { $0.question != nil }) { session in
+            // Questions the island cannot answer (no pending request): a click leads to the session.
+            ForEach(store.sessions.filter { session in
+                session.question != nil && !store.permissions.contains { $0.sessionId == session.id }
+            }) { session in
                 QuestionCard(session: session) { open(session.id) }
             }
             if let id = store.justFinished {
@@ -114,6 +122,10 @@ private struct PermissionCard: View {
             }
             HStack {
                 Button("Autoriser") { store.decide(permission, .allow) }.tint(.green)
+                if let rules = permission.sessionRules {
+                    Button("Toujours") { store.decide(permission, .allowForSession(rules)) }.tint(.teal)
+                        .help("Autoriser et ne plus demander pour cette session")
+                }
                 Button("Refuser") { store.decide(permission, .deny) }.tint(.red)
                 Button("Ouvrir", action: onOpen).tint(.gray)
             }
@@ -123,6 +135,47 @@ private struct PermissionCard: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white.opacity(0.08), in: .rect(cornerRadius: 12))
+    }
+}
+
+/// `AskUserQuestion`: a single single-choice question is answered here, anything else in the session.
+private struct AnswerCard: View {
+    let permission: SessionStore.Permission
+    let store: SessionStore
+    let onOpen: () -> Void
+
+    private var answerable: Bool { permission.questions.count == 1 && !permission.questions[0].multiSelect }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("\(store.name(of: permission.sessionId)) te pose une question", systemImage: "questionmark.bubble")
+                .font(.callout.bold())
+            ForEach(permission.questions, id: \.text) { question in
+                Text(question.text).font(.caption).lineLimit(4)
+                ForEach(Array(question.options.enumerated()), id: \.offset) { i, option in
+                    if answerable {
+                        Button { answer(question, option) } label: {
+                            Text("\(i + 1). \(option)").frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        Text("\(i + 1). \(option)").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Button(answerable ? "Écrire dans la session" : "Répondre dans la session", action: onOpen)
+                .buttonStyle(.borderedProminent).tint(.gray)
+        }
+        .controlSize(.small)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08), in: .rect(cornerRadius: 12))
+    }
+
+    private func answer(_ question: HookEvent.Question, _ option: String) {
+        guard let input = permission.toolInput else { return onOpen() }
+        store.dismissQuestion(of: permission.sessionId)
+        store.decide(permission, .answer(input: input, answers: [question.text: option]))
     }
 }
 

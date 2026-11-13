@@ -47,4 +47,33 @@ struct HookParsingTests {
         #expect(HookEvent(json: Data(#"{"hook_event_name":"PostCompact","session_id":"s1"}"#.utf8), headers: [:]) == nil)
         #expect(HookEvent(json: Data("pas du json".utf8), headers: [:]) == nil)
     }
+
+    /// "Toujours" sends Claude's own suggestion back, limited to the session.
+    @Test func allowForSessionEchoesSuggestionsScopedToSession() throws {
+        let json = Data(#"{"hook_event_name":"PermissionRequest","session_id":"s1","tool_name":"Bash","permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"npm test:*"}],"behavior":"allow","destination":"localSettings"}]}"#.utf8)
+        let rules = try #require(HookEvent(json: json, headers: [:])?.sessionRules)
+        let output = try #require(JSONSerialization.jsonObject(with: Decision.allowForSession(rules).output) as? [String: Any])
+        let decision = try #require((output["hookSpecificOutput"] as? [String: Any])?["decision"] as? [String: Any])
+        let update = try #require((decision["updatedPermissions"] as? [[String: Any]])?.first)
+        #expect(decision["behavior"] as? String == "allow")
+        #expect(update["destination"] as? String == "session")
+        #expect(update["type"] as? String == "addRules")
+
+        let bare = Data(#"{"hook_event_name":"PermissionRequest","session_id":"s1","tool_name":"Bash"}"#.utf8)
+        #expect(HookEvent(json: bare, headers: [:])?.sessionRules == nil)
+        #expect(Decision.terminal.output.isEmpty)
+    }
+
+    @Test func answersAskUserQuestionWithItsInput() throws {
+        let json = Data(#"{"hook_event_name":"PermissionRequest","session_id":"s1","tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Où ?","header":"Dossier","multiSelect":false,"options":[{"label":"A","description":"a"},{"label":"B","description":"b"}]}]}}"#.utf8)
+        let event = try #require(HookEvent(json: json, headers: [:]))
+        #expect(event.questions.first?.options == ["A", "B"])
+        let input = try #require(event.toolInput)
+        let output = try #require(JSONSerialization.jsonObject(with: Decision.answer(input: input, answers: ["Où ?": "B"]).output) as? [String: Any])
+        let decision = try #require((output["hookSpecificOutput"] as? [String: Any])?["decision"] as? [String: Any])
+        let updated = try #require(decision["updatedInput"] as? [String: Any])
+        #expect(decision["behavior"] as? String == "allow")
+        #expect(updated["answers"] as? [String: String] == ["Où ?": "B"])
+        #expect((updated["questions"] as? [Any])?.count == 1)
+    }
 }

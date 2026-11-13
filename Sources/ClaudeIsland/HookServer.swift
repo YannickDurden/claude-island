@@ -1,5 +1,8 @@
 import Foundation
 import Network
+import OSLog
+
+let log = Logger(subsystem: "local.ClaudeIsland", category: "hooks")
 
 /// The hook events registered in `hooks.json`.
 enum HookEventName: String, Sendable {
@@ -18,11 +21,22 @@ enum HookEventName: String, Sendable {
 
 /// The subset of a Claude Code hook payload the island displays.
 struct HookEvent: Sendable {
+    struct Question: Sendable {
+        let text: String
+        let options: [String]
+        let multiSelect: Bool
+    }
+
     let name: HookEventName
     let sessionId, cwd: String
     let tool, toolUseId, detail, message, notificationType, agentId, agentType: String?
     /// First question of an `AskUserQuestion` call, with a "(+n)" suffix when there are more.
     let question: String?
+    /// Claude's own "don't ask again" rules for a `PermissionRequest`, rescoped to the session (JSON array).
+    let sessionRules: Data?
+    /// `AskUserQuestion` only: its questions, and its raw input to send back with the answers.
+    let questions: [Question]
+    let toolInput: Data?
     /// From the hook's `headers` (env interpolation), empty when the variable is unset.
     let termProgram: String?
     let focusURL: URL?
@@ -43,10 +57,21 @@ struct HookEvent: Sendable {
         let input = o["tool_input"] as? [String: Any]
         detail = ["command", "file_path", "url", "pattern", "description", "prompt"]
             .lazy.compactMap { input?[$0] as? String }.first
+        questions = (input?["questions"] as? [[String: Any]] ?? []).compactMap { q in
+            guard let text = q["question"] as? String else { return nil }
+            let options = (q["options"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String }
+            return Question(text: text, options: options, multiSelect: q["multiSelect"] as? Bool ?? false)
+        }
+        toolInput = questions.isEmpty ? nil : input.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
         if let questions = input?["questions"] as? [[String: Any]], let first = questions.first?["question"] as? String {
             question = questions.count > 1 ? "\(first) (+\(questions.count - 1))" : first
         } else {
             question = nil
+        }
+        sessionRules = (o["permission_suggestions"] as? [[String: Any]]).flatMap { suggestions in
+            suggestions.isEmpty ? nil : try? JSONSerialization.data(withJSONObject: suggestions.map {
+                $0.merging(["destination": "session"]) { _, new in new }
+            })
         }
         termProgram = headers["x-term-program"].flatMap { $0.isEmpty ? nil : $0 }
         focusURL = .warp(headers["x-focus-url"]) ?? .claudeDesktop(headers["x-desktop-session"])
@@ -67,18 +92,30 @@ extension URL {
     }
 }
 
-enum Decision {
-    case allow, deny, terminal
+enum Decision: Equatable {
+    /// `allowForSession` carries the permission updates (JSON array) Claude adds for the rest of the session.
+    case allow, allowForSession(Data), deny, terminal
+    /// `AskUserQuestion` answered from the island: its input plus `answers` (question → option label).
+    // ponytail: the Agent SDK's answer format; undocumented for hooks, Claude falls back to its own prompt if ignored.
+    case answer(input: Data, answers: [String: String])
 
     /// Empty body = no decision: Claude Code falls back to its usual terminal prompt.
     var output: Data {
-        let behavior = switch self {
-        case .allow: "allow"
-        case .deny: "deny"
-        case .terminal: ""
+        var decision: [String: Any]
+        switch self {
+        case .allow: decision = ["behavior": "allow"]
+        case .allowForSession(let rules):
+            decision = ["behavior": "allow"]
+            decision["updatedPermissions"] = try? JSONSerialization.jsonObject(with: rules)
+        case .answer(let input, let answers):
+            var updated = (try? JSONSerialization.jsonObject(with: input) as? [String: Any]) ?? [:]
+            updated["answers"] = answers
+            decision = ["behavior": "allow", "updatedInput": updated]
+        case .deny: decision = ["behavior": "deny", "message": "Refusé depuis Claude Island"]
+        case .terminal: return Data()
         }
-        guard !behavior.isEmpty else { return Data() }
-        return Data(#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"\#(behavior)"}}}"#.utf8)
+        let output = ["hookSpecificOutput": ["hookEventName": "PermissionRequest", "decision": decision]]
+        return (try? JSONSerialization.data(withJSONObject: output)) ?? Data()
     }
 }
 
@@ -143,16 +180,19 @@ final class HookServer {
 
     private func handle(_ body: Data, _ headers: [String: String], _ conn: NWConnection) {
         guard let event = HookEvent(json: body, headers: headers) else { return Self.reply(conn) }
-        // Questions are answered in Claude itself: no decision, the island only shows them (via PreToolUse).
-        guard event.name == .permissionRequest, event.tool != "AskUserQuestion" else {
+        guard event.name == .permissionRequest else {
             store.handle(event)
             return Self.reply(conn)
         }
         // Keep the request open until the user decides in the island.
-        let id = store.requestPermission(event) { Self.reply(conn, $0.output) }
+        let id = store.requestPermission(event) { decision in
+            log.notice("Decision \(String(describing: decision), privacy: .public) for \(event.tool ?? "?", privacy: .public), connection \(String(describing: conn.state), privacy: .public)")
+            Self.reply(conn, decision.output)
+        }
         // Claude Code closes the connection on hook timeout: drop the stale card.
         conn.receive(minimumIncompleteLength: 1, maximumLength: 1) { [weak self] _, _, done, error in
             guard done || error != nil else { return }
+            log.notice("Claude closed a pending permission request")
             MainActor.assumeIsolated { self?.store.dropPermission(id) }
         }
     }
@@ -172,6 +212,9 @@ final class HookServer {
 
     private static func reply(_ conn: NWConnection, _ json: Data = Data()) {
         let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(json.count)\r\nConnection: close\r\n\r\n"
-        conn.send(content: Data(head.utf8) + json, completion: .contentProcessed { _ in conn.cancel() })
+        conn.send(content: Data(head.utf8) + json, completion: .contentProcessed { error in
+            if let error { log.error("Reply failed: \(error, privacy: .public)") }
+            conn.cancel()
+        })
     }
 }
